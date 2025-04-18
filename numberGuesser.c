@@ -2,13 +2,16 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
-#include <palette.h>  // Your global color palette
+#include <palette.h>  // A color palette lib I made (https://github.com/superjolt-test/palette.h)
 
 #define MAX_ENTRIES 1000
 
 #ifdef _WIN32
     #define CLEAR_SCREEN "cls"
+    #include <windows.h>
+    #define getpid GetCurrentProcessId
 #else
+    #include <unistd.h>
     #define CLEAR_SCREEN "clear"
 #endif
 
@@ -22,6 +25,7 @@ void debug();
 void game();
 void leaderboard();
 void showLeaderboard(int currentGameID);
+int compareScores(const void *a, const void *b);
 
 int playerID;
 int secretNumber;
@@ -92,7 +96,7 @@ void menu()
     printf(RESET "\n\n");
 
     printf(BOLD "What's your name? (No spaces) " RESET);
-    scanf("%s", name);
+    scanf("%24s", name);
 
     difficultyMenu();
 }
@@ -137,8 +141,14 @@ void game()
     while (guess != secretNumber)
     {
         printf(FG_CYAN "Guess: " RESET);
-        scanf("%d", &guess);
 
+        scanf("%d", &guess);
+        if (scanf("%d", &guess) != 1) {
+            printf(ALERT "Invalid input! Please enter a number.\n" RESET);
+            while (getchar() != '\n'); // Clear the buffer
+            continue;
+        }
+        
         if (guess < secretNumber)
             printf(FOREST "📉 Too small!\n" RESET);
         else if (guess > secretNumber)
@@ -156,12 +166,23 @@ void game()
 void leaderboard()
 {
     FILE *fp = fopen("leaderboard.txt", "a");
+
+    if (timeTaken == 0) timeTaken = 1; // If this was not there, in the bottom if timeTaken = 0, then you're dividing by 0, which = infinity
     score = ((float)moves / (float)timeTaken) * multiplier;
 
     fprintf(fp, "%-6d %-25s %-6d %-8ld %-7d %.3f\n", playerID, name, moves, timeTaken, maxNumber, score);
     fclose(fp);
 
     showLeaderboard(playerID);
+}
+
+int compareScores(const void *a, const void *b) {
+    const Entry *entryA = (const Entry *)a;
+    const Entry *entryB = (const Entry *)b;
+
+    if (entryA->score < entryB->score) return 1;  // descending
+    if (entryA->score > entryB->score) return -1;
+    return 0;
 }
 
 void showLeaderboard(int currentGameID)
@@ -190,18 +211,7 @@ void showLeaderboard(int currentGameID)
 
     fclose(fp);
 
-    for (int i = 0; i < count - 1; i++)
-    {
-        for (int j = i + 1; j < count; j++)
-        {
-            if (entries[j].score > entries[i].score)
-            {
-                Entry temp = entries[i];
-                entries[i] = entries[j];
-                entries[j] = temp;
-            }
-        }
-    }
+    qsort(entries, count, sizeof(Entry), compareScores); // Sort
 
     printf(BOLD "\n🏆 LEADERBOARD 🏆\n" RESET);
     printf(UNDERLINE "ID    Name                     Moves  Time     Range  Score\n" RESET);
